@@ -219,11 +219,7 @@ export default function VerifyOtpPage() {
       <CyberBackground />
       <div className="w-full max-w-md">
         <PageHeader />
-        <Suspense fallback={
-          <div className="text-center text-[rgba(148,163,184,0.5)] font-['Rajdhani']">
-            Loading...
-          </div>
-        }>
+        <Suspense fallback={null}>
           <OtpVerifyForm />
         </Suspense>
       </div>
