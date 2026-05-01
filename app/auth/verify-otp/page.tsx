@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import CyberBackground from "@/components/CyberBackground";
 import PageHeader from "@/components/PageHeader";
@@ -11,17 +12,17 @@ function OtpVerifyForm() {
   const router = useRouter();
   const params = useSearchParams();
   const email = params.get("email") ?? "";
-  const mode = params.get("mode") ?? "login";
+  const mode  = params.get("mode")  ?? "login";
 
-  const [digits, setDigits] = useState(["", "", "", "", "", ""]);
-  const [loading, setLoading] = useState(false);
+  const [digits,    setDigits]    = useState(["", "", "", "", "", ""]);
+  const [loading,   setLoading]   = useState(false);
   const [resending, setResending] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [error,     setError]     = useState("");
+  const [success,   setSuccess]   = useState("");
   const [countdown, setCountdown] = useState(60);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Countdown for resend
+  // Resend countdown
   useEffect(() => {
     if (countdown <= 0) return;
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
@@ -34,10 +35,7 @@ function OtpVerifyForm() {
     updated[index] = cleaned;
     setDigits(updated);
     setError("");
-
-    if (cleaned && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
+    if (cleaned && index < 5) inputRefs.current[index + 1]?.focus();
   }
 
   function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
@@ -67,22 +65,33 @@ function OtpVerifyForm() {
     setError("");
 
     try {
-      const res = await fetch("/api/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
+      // signIn("otp") calls the Credentials provider's authorize() on the server.
+      // NextAuth creates the session cookie automatically — works on both HTTP and HTTPS.
+      const result = await signIn("otp", {
+        email,
+        otp,
+        redirect: false,
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? "Verification failed.");
+      if (!result?.ok || result?.error) {
+        setError("Invalid or expired code. Please request a new one.");
         return;
       }
 
+      // Fetch the user's name from the session for the dashboard URL
+      let userName = "User";
+      try {
+        const sessionRes = await fetch("/api/auth/session");
+        const sessionData = await sessionRes.json();
+        userName = sessionData?.user?.name ?? "User";
+      } catch {
+        // Non-critical — dashboard falls back to session via useSession()
+      }
+
       setSuccess("Successfully Verified! Redirecting to AI Mentor...");
-      const name = encodeURIComponent(data.user?.name ?? "User");
-      // 1 second success flash, then navigate to dashboard
+      const name = encodeURIComponent(userName);
+
+      // 1 second flash, then navigate to dashboard
       setTimeout(() => {
         router.push(`/dashboard?name=${name}`);
       }, 1000);
@@ -127,7 +136,7 @@ function OtpVerifyForm() {
   return (
     <AuthCard
       title="Enter Verification Code"
-      subtitle={`We sent a 6-digit code to ${email}`}
+      subtitle={`We sent a 6-digit code to ${email || "your email"}`}
     >
       <form onSubmit={handleVerify} noValidate>
         {/* OTP digit boxes */}
@@ -143,7 +152,7 @@ function OtpVerifyForm() {
               onChange={(e) => handleDigitChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
               className={`
-                w-11 h-14 sm:w-13 sm:h-16 text-center text-xl sm:text-2xl font-['Orbitron'] font-bold
+                text-center text-xl sm:text-2xl font-['Orbitron'] font-bold
                 rounded-xl input-cyber transition-all duration-200
                 ${digit ? "border-[rgba(0,212,255,0.6)] text-[#00d4ff] shadow-[0_0_15px_rgba(0,212,255,0.3)]" : ""}
                 focus:border-[rgba(0,255,136,0.6)] focus:shadow-[0_0_15px_rgba(0,255,136,0.3)]
@@ -210,7 +219,11 @@ export default function VerifyOtpPage() {
       <CyberBackground />
       <div className="w-full max-w-md">
         <PageHeader />
-        <Suspense fallback={<div className="text-center text-[rgba(148,163,184,0.5)]">Loading...</div>}>
+        <Suspense fallback={
+          <div className="text-center text-[rgba(148,163,184,0.5)] font-['Rajdhani']">
+            Loading...
+          </div>
+        }>
           <OtpVerifyForm />
         </Suspense>
       </div>

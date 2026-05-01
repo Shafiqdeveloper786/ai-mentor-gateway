@@ -11,7 +11,8 @@ export const authConfig = {
   ],
   pages: {
     signIn: "/auth/login",
-    newUser: "/auth/register",
+    // newUser intentionally removed — without it, NextAuth honours callbackUrl: "/dashboard"
+    // that both register and login pages pass to signIn("google", { callbackUrl: "/dashboard" })
     error: "/auth/login",
   },
   callbacks: {
@@ -21,19 +22,18 @@ export const authConfig = {
       const isDashboard = path.startsWith("/dashboard");
       const isAuthPage = path.startsWith("/auth/");
 
-      // Unauthenticated user trying to reach /dashboard → hard redirect to login
+      // Unauthenticated user → /dashboard: hard-redirect to login with callbackUrl
       if (isDashboard && !isLoggedIn) {
         const loginUrl = new URL("/auth/login", nextUrl);
         loginUrl.searchParams.set("callbackUrl", nextUrl.href);
         return Response.redirect(loginUrl);
       }
 
-      // Already logged in → bounce off all /auth/* pages back to dashboard
+      // Authenticated user → any /auth/* page: bounce to dashboard
       if (isLoggedIn && isAuthPage) {
         return Response.redirect(new URL("/dashboard", nextUrl));
       }
 
-      // Everything else is allowed
       return true;
     },
     async jwt({ token, user }) {
